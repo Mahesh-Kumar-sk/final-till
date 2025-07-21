@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cash Count & Till Reconciliation</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: linear-gradient(145deg, #e0f7fa, #f0f4f8);
+      color: #333;
+    }
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #ffffff;
+      padding: 1.5rem;
+      border-radius: 15px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    }
+    h1, h2 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 1rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1.5rem;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 0.5rem;
+      text-align: center;
+    }
+    th {
+      background: #f1f1f1;
+    }
+    input[type="number"], input[type="text"], input[type="datetime-local"] {
+      width: 100%;
+      padding: 0.4rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.75rem;
+      font-weight: 500;
+    }
+    .total {
+      background: #d1ffd6;
+      font-weight: bold;
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 2rem;
+    }
+    button, .export-link {
+      background: linear-gradient(135deg, #007bff, #0056b3);
+      color: white;
+      padding: 0.6rem;
+      border: none;
+      border-radius: 6px;
+      text-align: center;
+      text-decoration: none;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover, .export-link:hover {
+      background: linear-gradient(135deg, #0056b3, #003d80);
+    }
+    .sticky-note {
+      background: #fff8c4;
+      border: 1px solid #e0dca3;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+      box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
+    .sticky-note textarea {
+      width: 100%;
+      height: 100px;
+      border: none;
+      resize: none;
+      background: transparent;
+      font-family: inherit;
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💰 Cash Count & Reconciliation</h1>
+
+    <label>Staff Name: <input type="text" id="staffName" placeholder="Enter staff name"></label>
+    <label>Date & Time: <input type="datetime-local" id="datetime"></label>
+
+    <h2>1. Cash Count</h2>
+    <table id="cashTable">
+      <thead>
+        <tr><th>Denomination</th><th>Value (£)</th><th>Qty</th><th>Total (£)</th></tr>
+      </thead>
+      <tbody id="cashBody"></tbody>
+      <tfoot>
+        <tr class="total"><td colspan="3">Total Cash Counted</td><td id="cashTotal">0.00</td></tr>
+      </tfoot>
+    </table>
+
+    <h2>2. Till Opening</h2>
+    <label>Opening Float (£): <input type="number" id="openingFloat" value="0" step="0.01"></label>
+    <p>Net Cash (After Float): <strong id="netCash">0.00</strong></p>
+
+    <h2>3. Payout</h2>
+    <label>Other Payouts (£): <input type="number" id="otherPayout" value="0" step="0.01"></label>
+    <label>Reason: <input type="text" id="payoutReason" placeholder="e.g. Boss took cash"></label>
+    <label>Lottery Payout (£): <input type="number" id="lotteryPayout" value="0" step="0.01"></label>
+    <p>Final Total Counted: <strong id="finalTotal">0.00</strong></p>
+
+    <h2>4. Till Report</h2>
+    <label>Till Report Sales (£): <input type="number" id="tillSales" value="0" step="0.01"></label>
+    <p>Difference: <strong id="difference">0.00</strong></p>
+    <p>Status: <strong id="status">✅ Balanced</strong></p>
+
+    <h2>Sticky Note</h2>
+    <div class="sticky-note">
+      <textarea id="stickyText" placeholder="Shift notes..."></textarea>
+    </div>
+
+    <div class="actions">
+      <button onclick="exportData()">📤 Export Report</button>
+      <a class="export-link" href="#" onclick="shareViaWhatsApp()">📲 Share via WhatsApp</a>
+    </div>
+  </div>
+
+  <script>
+    const denominations = [
+      { name: "£50 Notes", value: 50 },
+      { name: "£20 Notes", value: 20 },
+      { name: "£10 Notes", value: 10 },
+      { name: "£5 Notes", value: 5 },
+      { name: "£2 Coins", value: 2 },
+      { name: "£1 Coins", value: 1 },
+      { name: "50p Coins", value: 0.5 },
+      { name: "20p Coins", value: 0.2 },
+      { name: "10p Coins", value: 0.1 },
+      { name: "5p Coins", value: 0.05 },
+      { name: "2p Coins", value: 0.02 },
+      { name: "1p Coins", value: 0.01 }
+    ];
+
+    const cashBody = document.getElementById("cashBody");
+
+    denominations.forEach((denom, index) => {
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${denom.name}</td>
+        <td>${denom.value.toFixed(2)}</td>
+        <td><input type="number" id="qty${index}" value="0" min="0"></td>
+        <td id="total${index}">0.00</td>
+      `;
+      cashBody.appendChild(row);
+    });
+
+    const inputs = document.querySelectorAll("input, textarea");
+    inputs.forEach(input => input.addEventListener("input", updateTotals));
+
+    function updateTotals() {
+      let totalCash = 0;
+
+      denominations.forEach((denom, index) => {
+        const qty = parseInt(document.getElementById(`qty${index}`).value) || 0;
+        const total = qty * denom.value;
+        document.getElementById(`total${index}`).innerText = total.toFixed(2);
+        totalCash += total;
+      });
+
+      document.getElementById("cashTotal").innerText = totalCash.toFixed(2);
+
+      const openingFloat = parseFloat(document.getElementById("openingFloat").value) || 0;
+      const netCash = totalCash - openingFloat;
+      document.getElementById("netCash").innerText = netCash.toFixed(2);
+
+      const otherPayout = parseFloat(document.getElementById("otherPayout").value) || 0;
+      const lotteryPayout = parseFloat(document.getElementById("lotteryPayout").value) || 0;
+      const finalTotal = netCash + otherPayout + lotteryPayout;
+      document.getElementById("finalTotal").innerText = finalTotal.toFixed(2);
+
+      const tillSales = parseFloat(document.getElementById("tillSales").value) || 0;
+      const difference = tillSales - finalTotal;
+      document.getElementById("difference").innerText = difference >= 0 ? `-£${Math.abs(difference).toFixed(2)}` : `+£${Math.abs(difference).toFixed(2)}`;
+
+      const status = document.getElementById("status");
+      if (Math.abs(difference) < 0.01) {
+        status.innerText = "✅ Balanced";
+      } else if (difference > 0) {
+        status.innerText = `❌ Short`;
+      } else {
+        status.innerText = `❌ Over`;
+      }
+
+      localStorage.setItem("stickyText", document.getElementById("stickyText").value);
+    }
+
+    document.getElementById("stickyText").value = localStorage.getItem("stickyText") || "";
+
+    function exportData() {
+      const payoutReason = document.getElementById("payoutReason").value;
+      const dateTime = document.getElementById("datetime").value;
+      const staffName = document.getElementById("staffName").value;
+      const sticky = document.getElementById("stickyText").value;
+      let denomBreakdown = "\n💷 Cash Denomination Breakdown:\n";
+      let totalCash = 0;
+      denominations.forEach((denom, index) => {
+        const qty = parseInt(document.getElementById(`qty${index}`).value) || 0;
+        if (qty > 0) {
+          const lineTotal = (qty * denom.value).toFixed(2);
+          denomBreakdown += `- ${denom.name}: ${qty} x £${denom.value.toFixed(2)} = £${lineTotal}\n`;
+        }
+      });
+
+      denomBreakdown += `------------------------------------\nTotal Cash Counted: £${document.getElementById("cashTotal").innerText}`;
+
+      const data = `Cash Count Report:\nDate/Time: ${dateTime}\nStaff: ${staffName}${denomBreakdown}\n\nFloat: £${document.getElementById("openingFloat").value}\nNet Cash: £${document.getElementById("netCash").innerText}\nOther Payouts: £${document.getElementById("otherPayout").value} (Reason: ${payoutReason})\nLottery Payout: £${document.getElementById("lotteryPayout").value}\nFinal Total: £${document.getElementById("finalTotal").innerText}\nTill Sales: £${document.getElementById("tillSales").value}\nDifference: ${document.getElementById("difference").innerText}\nStatus: ${document.getElementById("status").innerText}\n\nNotes: ${sticky}`;
+
+      const blob = new Blob([data], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cash_report.txt";
+      a.click();
+    }
+
+    function shareViaWhatsApp() {
+      const payoutReason = document.getElementById("payoutReason").value;
+      const sticky = document.getElementById("stickyText").value;
+      const dateTime = document.getElementById("datetime").value;
+      const staffName = document.getElementById("staffName").value;
+      const message = `Cash Count Summary:\nDate/Time: ${dateTime}\nStaff: ${staffName}\nTotal: £${document.getElementById("cashTotal").innerText}\nFloat: £${document.getElementById("openingFloat").value}\nNet: £${document.getElementById("netCash").innerText}\nOther: £${document.getElementById("otherPayout").value} (Reason: ${payoutReason})\nLottery: £${document.getElementById("lotteryPayout").value}\nFinal: £${document.getElementById("finalTotal").innerText}\nTill: £${document.getElementById("tillSales").value}\nDiff: ${document.getElementById("difference").innerText}\nStatus: ${document.getElementById("status").innerText}\nNotes: ${sticky}`;
+      const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(url, '_blank');
+    }
+  </script>
+</body>
+</html>
